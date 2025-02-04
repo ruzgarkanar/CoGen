@@ -15,19 +15,15 @@ class TextChunker:
         self.respect_boundaries = respect_boundaries
         self.logger = logging.getLogger(__name__)
         
-        # Initialize NLTK and download required resources
         try:
-            # Alternatif tokenizer yükleme yaklaşımı
             nltk.download('punkt')
             nltk.download('averaged_perceptron_tagger')
             nltk.download('maxent_ne_chunker')
             nltk.download('words')
             
-            # Basit cümle bölme fonksiyonu
             self._sentence_tokenize = lambda text: re.split(r'(?<=[.!?])\s+', text)
         except Exception as e:
             self.logger.warning(f"NLTK initialization failed: {e}")
-            # Fallback olarak basit regex kullan
             self._sentence_tokenize = lambda text: re.split(r'(?<=[.!?])\s+', text)
 
         try:
@@ -61,17 +57,15 @@ class TextChunker:
                 self.logger.warning("Empty text provided")
                 return chunks
 
-            # Basit sentence splitting kullan
             sentences = self._sentence_tokenize(text)
             current_chunk = []
             current_length = 0
             
             for i, sentence in enumerate(sentences):
-                # Boş cümleleri atla
                 if not sentence.strip():
                     continue
                     
-                words = sentence.split()  # Basit word tokenization
+                words = sentence.split() 
                 sentence_length = len(words)
                 
                 if current_length + sentence_length <= self.chunk_size:
@@ -91,7 +85,6 @@ class TextChunker:
                     current_chunk = [sentence]
                     current_length = sentence_length
 
-            # Son chunk'ı ekle
             if current_chunk:
                 chunk_text = ' '.join(current_chunk)
                 chunk = self._create_chunk(
@@ -102,7 +95,6 @@ class TextChunker:
                 )
                 chunks.append(chunk)
 
-            # Neighbor bilgilerini güncelle
             for i in range(len(chunks) - 1):
                 chunks[i]['neighbors']['next'] = chunks[i + 1]['id']
 

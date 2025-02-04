@@ -13,7 +13,6 @@ class DocumentLoader:
         
     def load_documents(self) -> List[Dict]:
         try:
-            # Check vector store metadata
             if self.vector_store_dir.exists():
                 metadata_file = self.vector_store_dir / "metadata.json"
                 if metadata_file.exists():
@@ -21,10 +20,8 @@ class DocumentLoader:
                     with open(metadata_file, 'r') as f:
                         try:
                             metadata = json.load(f)
-                            # Directly convert numbered dict to list
                             documents = []
                             if isinstance(metadata, dict):
-                                # Handle both formats: numbered dict or documents list
                                 if 'documents' in metadata:
                                     documents = metadata['documents']
                                 else:
@@ -39,8 +36,7 @@ class DocumentLoader:
                         except json.JSONDecodeError:
                             self.logger.warning("Invalid metadata file")
 
-            # Fallback to PDF loading
-            pdf_files = list(self.data_dir.glob("**/*.pdf"))  # Recursive arama
+            pdf_files = list(self.data_dir.glob("**/*.pdf"))  
             self.logger.info(f"Found {len(pdf_files)} PDF documents")
             
             documents = []
@@ -66,7 +62,6 @@ class DocumentLoader:
                     self.logger.error(f"Error processing {pdf_path}: {e}")
                     continue
             
-            # Yüklenen dokümanları metadata olarak kaydet
             if documents:
                 self._save_metadata({'documents': documents})
                 
@@ -77,7 +72,6 @@ class DocumentLoader:
             return []
 
     def _save_metadata(self, metadata: Dict):
-        """Metadata'yı vector store dizinine kaydet"""
         try:
             self.vector_store_dir.mkdir(parents=True, exist_ok=True)
             metadata_file = self.vector_store_dir / "metadata.json"
@@ -91,7 +85,6 @@ class DocumentLoader:
 
     def save_document(self, document: Dict, is_metadata: bool = True):
         try:
-            # Vector store dizinini oluştur
             self.vector_store_dir.mkdir(parents=True, exist_ok=True)
             
             if is_metadata:
@@ -114,7 +107,6 @@ class DocumentLoader:
                     f.truncate()
                     
             else:
-                # Diğer JSON dosyaları için
                 filepath = self.data_directory / f"{document.get('id', 'doc')}.json"
                 with open(filepath, 'w', encoding='utf-8') as f:
                     json.dump(document, f, ensure_ascii=False, indent=2)

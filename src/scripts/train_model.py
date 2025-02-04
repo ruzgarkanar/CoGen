@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
 
-# Add project root to Python path
 project_root = str(Path(__file__).parent.parent.parent)
 if project_root not in sys.path:
     sys.path.append(project_root)
@@ -25,7 +24,6 @@ def main():
         data_dir = base_dir / "processed-data"
         vector_store_dir = data_dir / "vector_store"
 
-        # Directory checks and logging
         logger.info(f"Checking paths:")
         logger.info(f"Base dir: {base_dir}")
         logger.info(f"Data dir: {data_dir}")
@@ -35,23 +33,19 @@ def main():
             logger.error(f"Vector store directory not found. Please run prepare_data.py first")
             return
 
-        # Check metadata file
         metadata_file = vector_store_dir / "metadata.json"
         if not metadata_file.exists():
             logger.error(f"Metadata file not found. Please run prepare_data.py first")
             return
             
-        # Load and validate metadata content
         try:
             with open(metadata_file, 'r') as f:
                 metadata = json.load(f)
-                # Convert dict_keys to list for JSON serialization
                 logger.debug(f"Metadata structure: {json.dumps(list(metadata.keys()), indent=2)}")
         except Exception as e:
             logger.error(f"Failed to read metadata: {e}")
             return
 
-        # DocumentLoader with processed-data directory
         doc_loader = DocumentLoader(str(data_dir))
         processed_documents = doc_loader.load_documents()
         
