@@ -166,3 +166,12 @@ Python 3.10+
 8GB RAM
 SSD storage
 NVIDIA GPU (optional)
+
+## 📋 Script Execution Guide
+
+### 1. Data Preparation (Required)
+
+python run.py prepare  # Data preparation
+python run.py init    # System initialization
+python run.py train   # Model training
+python run.py test    # Start chat interface

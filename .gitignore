@@ -1,7 +1,28 @@
-
+# Environment
 .env
+venv/
+env/
+.vscode/
+.idea/
+
+# Python
 __pycache__/
-*.pyc
-processed-data/
+*.py[cod]
+*.so
+.Python
+*.egg-info/
+
+# Project specific
 demo-data/
+processed-data/
 models/
+*.bin
+*.pt
+
+# Logs
+*.log
+logs/
+
+# OS specific
+.DS_Store
+Thumbs.db
