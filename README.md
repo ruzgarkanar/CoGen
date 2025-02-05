@@ -169,9 +169,8 @@ NVIDIA GPU (optional)
 
 ## 📋 Script Execution Guide
 
-### 1. Data Preparation (Required)
+### Step by Step Run
 
-python run.py prepare  # Data preparation
-python run.py init    # System initialization
-python run.py train   # Model training
-python run.py test    # Start chat interface
+- prepare_data.py → Processes documents, converts text to vectors.
+- train_model.py → Fine-tune the DistilBERT model, making it produce better answers.
+- test_chatbot.py → Receives user questions, finds relevant documents and generates answers.
