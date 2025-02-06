@@ -5,29 +5,32 @@ import faiss
 import pickle
 import json
 import logging
-from datetime import datetime  
-from sentence_transformers import SentenceTransformer 
-from ..config.settings import HF_TOKEN
+from datetime import datetime
+from sentence_transformers import SentenceTransformer
+from ..config.settings import (
+    BATCH_SIZE, VECTOR_DIMENSION, HF_TOKEN,
+    TOP_K_RETRIEVAL, SIMILARITY_THRESHOLD
+)
+from ..utils.cache_manager import CacheManager
 
 class VectorStore:
-    def __init__(self, index_path: str = "data/vector_index"):
+    def __init__(self, index_path: str = "data/vector_store"):
         self.logger = logging.getLogger(__name__)
         self.index_path = Path(index_path)
         self.index_path.mkdir(parents=True, exist_ok=True)
         
-        self.dimension = 384 
+        self.dimension = VECTOR_DIMENSION
         self.index = None
+        self.cache_manager = CacheManager()
         
         self.metadata = {}
         self.id_to_metadata = {}
+        self.batch_size = BATCH_SIZE
         
         self._initialize_index()
         
-        self.cache = {}
-        self.batch_size = 1000
-        
         self.encoder = SentenceTransformer(
-            'sentence-transformers/all-MiniLM-L6-v2',
+            'sentence-transformers/all-mpnet-base-v2',  
             token=HF_TOKEN
         )
         
@@ -46,34 +49,27 @@ class VectorStore:
 
     def add_documents(self, documents: List[Dict], embeddings: np.ndarray):
         try:
-            if len(embeddings.shape) != 2:
-                embeddings = embeddings.reshape(-1, self.dimension)
+            total_docs = len(documents)
+            for i in range(0, total_docs, self.batch_size):
+                batch_docs = documents[i:i + self.batch_size]
+                batch_embeddings = embeddings[i:i + self.batch_size]
                 
-            if len(documents) != embeddings.shape[0]:
-                raise ValueError(f"Number of documents ({len(documents)}) and embeddings ({embeddings.shape[0]}) must match")
-            
-            if embeddings.shape[1] != self.dimension:
-                raise ValueError(f"Embedding dimension mismatch. Expected {self.dimension}, got {embeddings.shape[1]}")
-            
-            start_id = self.index.ntotal
-            
-            self.index.add(embeddings.astype('float32'))
-            
-            self.logger.debug(f"Adding embeddings with shape: {embeddings.shape}")
-            
-            for idx, doc in enumerate(documents):
-                doc_id = str(start_id + idx)
-                self.id_to_metadata[doc_id] = {
-                    'content': doc['content'],
-                    'metadata': doc.get('metadata', {}),
-                    'source': doc.get('source', 'unknown'),
-                    'timestamp': datetime.now().isoformat()
-                }
+                self.logger.info(f"Processing batch {i//self.batch_size + 1} of {total_docs//self.batch_size + 1}")
+                
+                if len(batch_embeddings.shape) != 2:
+                    batch_embeddings = batch_embeddings.reshape(-1, self.dimension)
+                
+                start_id = self.index.ntotal
+                self.index.add(batch_embeddings.astype('float32'))
+                
+                self._batch_update_metadata(batch_docs, start_id)
+                
+                if (i + self.batch_size) % (self.batch_size * 5) == 0:
+                    self._save_index()
+                    self._save_metadata()
             
             self._save_index()
             self._save_metadata()
-            
-            self.logger.info(f"Added {len(documents)} documents. New total: {self.index.ntotal}")
             
         except Exception as e:
             self.logger.error(f"Failed to add documents: {str(e)}")
@@ -82,8 +78,8 @@ class VectorStore:
     def _batch_update_metadata(self, documents: List[Dict], start_id: int):
         metadata_updates = {}
         for idx, doc in enumerate(documents):
-            doc_id = start_id + idx
-            metadata_updates[str(doc_id)] = { 
+            doc_id = str(start_id + idx)
+            metadata_updates[doc_id] = {
                 'content': doc['content'],
                 'metadata': doc.get('metadata', {}),
                 'source': doc.get('source', 'unknown'),
@@ -91,8 +87,13 @@ class VectorStore:
             }
         
         self.id_to_metadata.update(metadata_updates)
+        
+        for doc_id, metadata in metadata_updates.items():
+            cache_key = f"doc:{doc_id}"
+            self.cache_manager.set(cache_key, metadata)
 
-    def search(self, query_vector: np.ndarray, k: int = 5, threshold: float = 0.1) -> List[Tuple[Dict, float]]:
+    def search(self, query_vector: np.ndarray, k: int = TOP_K_RETRIEVAL, 
+               threshold: float = SIMILARITY_THRESHOLD) -> List[Tuple[Dict, float]]:
         try:
             if len(query_vector.shape) == 1:
                 query_vector = query_vector.reshape(1, -1)
@@ -181,6 +182,13 @@ class VectorStore:
         self._save_metadata()
 
     def search_documents(self, query: str, top_k: int = 3) -> List[Dict]:
+        cache_key = f"search:{query}:{top_k}"
+        cached_result = self.cache_manager.get(cache_key)
+        
+        if cached_result:
+            self.logger.info("Returning cached search result")
+            return cached_result
+            
         try:
             self.logger.debug(f"Searching for query: {query}")
             self.logger.debug(f"Index size: {self.index.ntotal if self.index else 0}")
@@ -213,6 +221,10 @@ class VectorStore:
                         results.append(doc)
             
             self.logger.info(f"Found {len(results)} relevant documents")
+            
+            if results:
+                self.cache_manager.set(cache_key, results)
+            
             return results
             
         except Exception as e:

@@ -25,7 +25,7 @@ class DataPreparer:
         self.text_chunker = TextChunker(chunk_size=512, overlap=50)
         self.text_processor = AdvancedTextProcessor()
         self.vector_store = VectorStore(str(self.output_dir / "vector_store"))
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.encoder = SentenceTransformer('all-mpnet-base-v2')
         
     def process_documents(self):
         try:

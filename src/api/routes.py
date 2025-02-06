@@ -47,9 +47,7 @@ async def chat(
     query: Query,
     chatbot: Chatbot = Depends(get_chatbot)
 ) -> Dict:
-    """
-    Generate a response for the given query
-    """
+
     start_time = time.time()
     
     try:
@@ -74,9 +72,7 @@ async def chat(
 
 @app.get("/health")
 async def health_check() -> Dict:
-    """
-    Check API health status
-    """
+
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat()
@@ -86,9 +82,7 @@ async def health_check() -> Dict:
 async def get_stats(
     chatbot: Chatbot = Depends(get_chatbot)
 ) -> Dict:
-    """
-    Get chatbot statistics
-    """
+
     return {
         "document_count": len(chatbot.documents),
         "conversation_history_length": len(chatbot.conversation_history),
@@ -99,9 +93,7 @@ async def get_stats(
 async def reload_documents(
     chatbot: Chatbot = Depends(get_chatbot)
 ) -> Dict:
-    """
-    Reload and reprocess all documents
-    """
+
     try:
         chatbot.load_and_process_documents()
         return {
@@ -114,9 +106,7 @@ async def reload_documents(
 
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
-    """
-    Middleware to track request processing time
-    """
+
     start_time = time.time()
     response = await call_next(request)
     process_time = time.time() - start_time
@@ -125,9 +115,7 @@ async def add_process_time_header(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """
-    Global exception handler
-    """
+
     logger.error(f"Global error: {str(exc)}")
     return JSONResponse(
         status_code=500,

@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+import asyncio
 
 project_root = str(Path(__file__).parent.parent.parent)
 if project_root not in sys.path:
@@ -11,7 +12,7 @@ from src.models.model_manager import ModelManager
 from src.models.model_trainer import ModelTrainer
 from src.data.document_loader import DocumentLoader
 
-def main():
+async def main():
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -47,7 +48,7 @@ def main():
             return
 
         doc_loader = DocumentLoader(str(data_dir))
-        processed_documents = doc_loader.load_documents()
+        processed_documents = await doc_loader.load_documents()
         
         logger.info(f"Loaded {len(processed_documents)} documents")
         if len(processed_documents) == 0:
@@ -78,4 +79,4 @@ def main():
         raise
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

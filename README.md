@@ -19,9 +19,87 @@ An advanced document understanding and question-answering system powered by stat
 - **Multi-Language Support**: Built-in support for English and Turkish
 - **Smart Q&A**: Context-aware responses with confidence scoring
 
-## 🚀 Quick Start
+## 🚀 Quick Start Guide
 
-### Prerequisites
+### 1. Clone & Setup
+```bash
+git clone https://github.com/yourusername/CoGen.git
+cd CoGen
+
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install Spacy model
+python -m spacy download en_core_web_lg
+```
+
+### 2. Configuration
+1. Copy `.env.example` to `.env`
+2. Get HuggingFace token from https://huggingface.co/settings/tokens
+3. Update `.env` file with your token:
+```
+HF_TOKEN=your_token_here
+```
+
+### 3. Prepare Documents
+1. Create `demo-data` folder in project root
+2. Add your documents (supported formats: PDF, DOCX, TXT, PNG, JPG)
+
+### 4. Run System
+Run these scripts in order:
+
+```bash
+# 1. Process and vectorize documents
+python -m src.scripts.prepare_data
+
+# 2. Initialize system and create vector store
+python -m src.scripts.initialize_system
+
+# 3. Train the model
+python -m src.scripts.train_model
+
+# 4. Start chatbot
+python -m src.scripts.test_chatbot
+```
+
+### 5. Usage
+- Type your questions in natural language
+- Type 'quit' to exit
+- System will provide answers with confidence scores and sources
+
+### System Requirements
+- Python 3.8+
+- 8GB RAM recommended
+- SSD storage recommended
+- CUDA-compatible GPU (optional)
+
+### Troubleshooting
+1. If you see OCR errors:
+   ```bash
+   # On Ubuntu/Debian
+   sudo apt-get install tesseract-ocr
+   # On macOS
+   brew install tesseract
+   ```
+
+2. If you see PDF processing errors:
+   ```bash
+   # On Ubuntu/Debian
+   sudo apt-get install poppler-utils
+   # On macOS
+   brew install poppler
+   ```
+
+3. For GPU support:
+   - Install CUDA toolkit
+   - Update torch with: `pip install torch --upgrade`
+
+### Note
+- First run will download required models (~2GB)
+- Redis cache is optional but recommended for better performance
 
 ## Project Purpose
 This project is an AI system capable of automatically understanding, processing, and answering questions about documents. Its main objectives are:
@@ -167,10 +245,3 @@ Python 3.10+
 SSD storage
 NVIDIA GPU (optional)
 
-## 📋 Script Execution Guide
-
-### Step by Step Run
-
-- prepare_data.py → Processes documents, converts text to vectors.
-- train_model.py → Fine-tune the DistilBERT model, making it produce better answers.
-- test_chatbot.py → Receives user questions, finds relevant documents and generates answers.

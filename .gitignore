@@ -1,5 +1,5 @@
 # Environment
-.env
+
 venv/
 env/
 .vscode/
@@ -15,7 +15,6 @@ __pycache__/
 # Project specific
 demo-data/
 processed-data/
-models/
 *.bin
 *.pt
 

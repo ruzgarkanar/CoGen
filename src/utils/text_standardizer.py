@@ -239,7 +239,6 @@ class TextStandardizer:
         for term_type, pattern in self.custom_rules.items():
             matches = re.finditer(pattern, text)            
             for match in matches:
-                # Teknik terimleri koru
                 term = match.group()
                 text = text.replace(term, f" {term} ")
         return text
