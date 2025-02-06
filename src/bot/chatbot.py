@@ -11,66 +11,70 @@ from ..data.document_loader import DocumentLoader
 from ..utils.text_standardizer import TextStandardizer
 from ..utils.advanced_text_processor import AdvancedTextProcessor
 from ..database.vector_store import VectorStore
+from ..config.settings import MODEL_NAME, ENCODER_MODEL, HF_TOKEN
 
 class Chatbot:
     def __init__(self, data_dir: str, model_dir: str = None, language: str = 'en'):
         self.logger = logging.getLogger(__name__)
         self.language = language
-        self.model_dir = model_dir
+        self.model_dir = Path(model_dir) if model_dir else None
+        self._initialize_basic_components(data_dir)
         
+        self._qa_model = None
+        self._qa_tokenizer = None
+        self._encoder = None
+
+    def _initialize_basic_components(self, data_dir: str):
         self.preprocessor = Preprocessor()
         self.doc_loader = DocumentLoader(data_dir)
         self.text_standardizer = TextStandardizer()
         self.text_processor = AdvancedTextProcessor()
-        
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
-        
-        if model_dir:
-            model_path = Path(model_dir) / "model"  
-            tokenizer_path = Path(model_dir) / "tokenizer"  
-            
-            if (model_path / "config.json").exists() and (model_path / "pytorch_model.bin").exists():
-                try:
-                    self.logger.info(f"Loading QA model from {model_path}")
-                    self.qa_model = AutoModelForQuestionAnswering.from_pretrained(str(model_path))
-                    
-                    self.logger.info(f"Loading tokenizer from {tokenizer_path}")
-                    self.qa_tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_path))
-                    
-                    self.logger.info("Successfully loaded QA model and tokenizer")
-                except Exception as e:
-                    self.logger.error(f"Error loading QA model: {e}")
-                    self.qa_model = None
-                    self.qa_tokenizer = None
-            else:
-                self.logger.warning(f"Required model files not found in {model_path}")
-                self.qa_model = None
-                self.qa_tokenizer = None
-        else:
-            self.qa_model = None
-            self.qa_tokenizer = None
-        
-        if model_dir:
-            try:
-                from ..models.model_manager import ModelManager
-                self.model_manager = ModelManager(model_dir)
-                self.model_manager.load_model()
-                self.logger.info("Model manager initialized successfully")
-            except Exception as e:
-                self.logger.error(f"Error initializing model manager: {e}")
-                self.model_manager = None
-        else:
-            self.model_manager = None
-
-        self.documents = []
-        self.document_embeddings = {}
-        self.conversation_history = []
         self.vector_store = VectorStore(str(Path(data_dir) / "vector_store"))
-        
-        self.load_and_process_documents()
+        self.conversation_history = []
+
+    @property
+    def qa_model(self):
+        if self._qa_model is None and self.model_dir:
+            try:
+                model_path = self.model_dir / "model"
+                if self._check_model_files(model_path):
+                    self.logger.info(f"Loading QA model from {model_path}")
+                    self._qa_model = AutoModelForQuestionAnswering.from_pretrained(
+                        str(model_path)
+                    ).to(self._get_device())
+            except Exception as e:
+                self.logger.error(f"Error loading QA model: {e}")
+        return self._qa_model
+
+    @property
+    def qa_tokenizer(self):
+        if self._qa_tokenizer is None and self.model_dir:
+            try:
+                tokenizer_path = self.model_dir / "tokenizer"
+                if tokenizer_path.exists():
+                    self.logger.info(f"Loading tokenizer from {tokenizer_path}")
+                    self._qa_tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_path))
+            except Exception as e:
+                self.logger.error(f"Error loading tokenizer: {e}")
+        return self._qa_tokenizer
+
+    @property
+    def encoder(self):
+        if self._encoder is None:
+            try:
+                self.logger.info(f"Loading encoder model: {ENCODER_MODEL}")
+                self._encoder = SentenceTransformer(ENCODER_MODEL, token=HF_TOKEN)
+            except Exception as e:
+                self.logger.error(f"Error loading encoder: {e}")
+        return self._encoder
+
+    def _check_model_files(self, model_path: Path) -> bool:
+        return (model_path / "config.json").exists() and (model_path / "pytorch_model.bin").exists()
+
+    def _get_device(self) -> torch.device:
+        return torch.device('cpu')
 
     def load_and_process_documents(self):
-        """Load, process and vectorize documents"""
         try:
             raw_documents = self.doc_loader.load_documents()
             if not raw_documents:
@@ -204,7 +208,6 @@ class Chatbot:
         query_keyphrases: List[str],
         top_k: int = 3
     ) -> List[Tuple[Dict, float]]:
-        """Find most relevant documents using multiple similarity metrics"""
         return self.vector_store.search(
             query_embedding,
             k=top_k,
@@ -217,7 +220,6 @@ class Chatbot:
         relevant_docs: List[Tuple[Dict, float]],
         conversation_history: List[Dict]
     ) -> Dict:
-        """Generate response using context and conversation history"""
         try:
             best_doc, confidence = relevant_docs[0]
             
@@ -247,18 +249,15 @@ class Chatbot:
 
 
     def _calculate_embedding_similarity(self, query_embed: np.ndarray, doc_embed: np.ndarray) -> float:
-        """Calculate cosine similarity between embeddings"""
         return np.dot(query_embed, doc_embed) / (np.linalg.norm(query_embed) * np.linalg.norm(doc_embed))
 
     def _calculate_keyphrase_similarity(self, query_phrases: List[str], doc_phrases: List[str]) -> float:
-        """Calculate similarity based on shared keyphrases"""
         if not query_phrases or not doc_phrases:
             return 0.0
         shared = set(query_phrases) & set(doc_phrases)
         return len(shared) / max(len(query_phrases), len(doc_phrases))
 
     def _update_conversation_history(self, query: str, response: Dict):
-        """Update conversation history"""
         self.conversation_history.append({
             'query': query,
             'response': response,
@@ -269,7 +268,6 @@ class Chatbot:
             self.conversation_history = self.conversation_history[-10:]
 
     def _generate_qa_response(self, question: str, context: str) -> Dict:
-        """BERT-QA model ile cevap üret"""
         try:
             if not context or not question:
                 self.logger.warning("Empty context or question")
@@ -331,7 +329,6 @@ class Chatbot:
             return self._generate_simple_response([({"content": context}, 0.5)])
 
     def _generate_simple_response(self, relevant_docs: List[Tuple[Dict, float]]) -> Dict:
-        """Basit cevap üretme"""
         try:
             best_doc, confidence = relevant_docs[0]
             
@@ -364,7 +361,6 @@ class Chatbot:
             return self._create_error_response(str(e))
 
     def _create_error_response(self, error_message: str) -> Dict:
-        """Hata durumunda cevap oluştur"""
         return {
             "status": "error",
             "response": f"Sorry, an error occurred: {error_message}",
@@ -373,7 +369,6 @@ class Chatbot:
         }
         
     def _create_no_match_response(self) -> Dict:
-        """Eşleşme bulunamadığında cevap oluştur"""
         return {
             "status": "no_match",
             "response": "Sorry, I couldn't find any relevant information for your question.",
@@ -382,7 +377,6 @@ class Chatbot:
         }
         
     def _extract_relevant_sentences(self, query: str, context: str, num_sentences: int = 2) -> List[str]:
-        """Bağlamdan ilgili cümleleri çıkar"""
         try:
             sentences = context.split('.')
             return sentences[:num_sentences]
@@ -391,15 +385,13 @@ class Chatbot:
             return [context[:200] + "..."]
 
     def _calculate_similarity(self, text1: str, text2: str) -> float:
-        """İki metin arasındaki benzerliği hesapla"""
         words1 = set(text1.split())
         words2 = set(text2.split())
         intersection = words1.intersection(words2)
         union = words1.union(words2)
-        return len(intersection) / len(union) if union else 0.0
+        return len(intersection) / len(union if union else 0.0)
 
     def _extract_relevant_sentence(self, content: str, question: str) -> str:
-        """En alakalı cümleyi seç"""
         try:
             sentences = [s.strip() for s in content.split('.') if len(s.strip()) > 10]
             
@@ -442,7 +434,6 @@ class Chatbot:
             return content[:200] + "..."
 
     def _find_section_with_context(self, content: str, question: str) -> str:
-        """Soruyla ilgili bölümü bul ve bağlamıyla birlikte döndür"""
         words = content.split()
         question_words = set(question.lower().split())
         

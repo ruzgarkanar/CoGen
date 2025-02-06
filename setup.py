@@ -15,6 +15,10 @@ setup(
         'pdf2image>=1.16.3',  
         'pytesseract>=0.3.10',  
         'python-docx>=0.8.11',  
-        'Pillow>=9.5.0'  
+        'redis>=4.5.0',  
+        'Pillow>=9.5.0',
+        'aiohttp>=3.8.0',
+        'aiofiles>=23.1.0',
+        'asyncio>=3.4.3'
     ]
 )

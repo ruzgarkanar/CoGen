@@ -1,4 +1,5 @@
 import sys
+import asyncio
 from pathlib import Path
 
 project_root = str(Path(__file__).parent.parent.parent)
@@ -9,7 +10,7 @@ import logging
 from src.bot.chatbot import Chatbot
 from src.scripts.initialize_system import initialize_system
 
-def main():
+async def main():
     logging.basicConfig(
         level=logging.DEBUG,  
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -17,7 +18,7 @@ def main():
     logger = logging.getLogger(__name__)
     
     try:
-        if not initialize_system():
+        if not await initialize_system():
             logger.error("System initialization failed!")
             return
             
@@ -58,4 +59,4 @@ def main():
         raise
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

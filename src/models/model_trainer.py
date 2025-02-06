@@ -4,6 +4,11 @@ from transformers import AdamW
 from typing import List, Dict
 import logging
 import re
+from ..config.settings import (
+    LEARNING_RATE, NUM_EPOCHS, TRAIN_BATCH_SIZE, 
+    MAX_LENGTH, WARMUP_RATIO, MAX_GRAD_NORM,
+    EARLY_STOPPING_PATIENCE
+)
 
 class QADataset(Dataset):
     def __init__(self, data: List[Dict], tokenizer):
@@ -162,10 +167,7 @@ class ModelTrainer:
         possible_questions = questions.get(entity_type, default_questions)
         return possible_questions[0]
 
-    def train_model(self, training_data: List[Dict], 
-                   epochs: int = 50, 
-                   batch_size: int = 1,
-                   learning_rate: float = 5e-6):  
+    def train_model(self, training_data: List[Dict]):  
         try:
             if not training_data:
                 raise ValueError("No valid training data provided")
@@ -175,7 +177,7 @@ class ModelTrainer:
             dataset = QADataset(training_data, self.model_manager.tokenizer)
             dataloader = DataLoader(
                 dataset,
-                batch_size=batch_size,
+                batch_size=TRAIN_BATCH_SIZE,
                 shuffle=True,
                 num_workers=0,
                 pin_memory=False 
@@ -185,19 +187,19 @@ class ModelTrainer:
             
             optimizer = AdamW(
                 self.model_manager.model.parameters(),
-                lr=learning_rate,
+                lr=LEARNING_RATE,
                 eps=1e-8,
                 weight_decay=0.001,  
                 correct_bias=True
             )
             
-            num_training_steps = len(dataloader) * epochs
-            num_warmup_steps = num_training_steps // 10
+            num_training_steps = len(dataloader) * NUM_EPOCHS
+            num_warmup_steps = int(num_training_steps * WARMUP_RATIO)
             
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 optimizer,
-                max_lr=learning_rate,
-                epochs=epochs,
+                max_lr=LEARNING_RATE,
+                epochs=NUM_EPOCHS,
                 steps_per_epoch=len(dataloader),
                 pct_start=0.1,
                 anneal_strategy='cos'
@@ -208,7 +210,7 @@ class ModelTrainer:
             best_loss = float('inf')
             no_improvement = 0
             
-            for epoch in range(epochs):
+            for epoch in range(NUM_EPOCHS):
                 total_loss = 0.0
                 valid_batches = 0
                 
@@ -228,7 +230,7 @@ class ModelTrainer:
                         loss = outputs.loss
                         
                         if torch.isfinite(loss) and loss.item() > 0:
-                            scaled_loss = loss / batch_size
+                            scaled_loss = loss / TRAIN_BATCH_SIZE
                             
                             scaled_loss.backward()
 
@@ -271,7 +273,7 @@ class ModelTrainer:
                 
                 if valid_batches > 0:
                     avg_loss = total_loss / valid_batches
-                    self.logger.info(f"Epoch {epoch+1}/{epochs}, Average Loss: {avg_loss:.4f}")
+                    self.logger.info(f"Epoch {epoch+1}/{NUM_EPOCHS}, Average Loss: {avg_loss:.4f}")
                     
                     if avg_loss < best_loss:
                         best_loss = avg_loss
@@ -279,7 +281,7 @@ class ModelTrainer:
                         self.model_manager.save_model()
                     else:
                         no_improvement += 1
-                        if no_improvement >= 5:
+                        if no_improvement >= EARLY_STOPPING_PATIENCE:
                             self.logger.info("Early stopping triggered")
                             break
                 else:
@@ -330,3 +332,75 @@ class ModelTrainer:
         }
         
         return question_templates.get(info_type, "")
+
+    def _generate_dynamic_questions(self, text: str, entity: Dict) -> List[Dict]:
+        questions = []
+        
+        context_before = text[:entity['start_position']].strip()
+        context_after = text[entity['end_position']:].strip()
+        
+        if context_before:
+            questions.append({
+                'question': f"What leads to {entity['text']}?",
+                'context': context_before + " " + entity['text'],
+                'answer': entity['text']
+            })
+            
+        if context_after:
+            questions.append({
+                'question': f"What happens after {entity['text']}?",
+                'context': entity['text'] + " " + context_after,
+                'answer': context_after.split('.')[0]
+            })
+
+        related_entities = self._find_related_entities(text, entity['text'])
+        for rel_entity in related_entities:
+            questions.append({
+                'question': f"What is the relationship between {entity['text']} and {rel_entity}?",
+                'context': text,
+                'answer': self._find_relationship_context(text, entity['text'], rel_entity)
+            })
+
+        questions.extend(self._generate_detail_questions(entity))
+        
+        return questions
+
+    def _find_related_entities(self, text: str, target_entity: str) -> List[str]:
+        doc = self.nlp(text)
+        related = []
+        
+        for ent in doc.ents:
+            if ent.text != target_entity:
+                if any(target_entity in sent.text and ent.text in sent.text 
+                      for sent in doc.sents):
+                    related.append(ent.text)
+                    
+        return related
+
+    def _generate_detail_questions(self, entity: Dict) -> List[Dict]:
+        questions = []
+        
+        if entity.get('attributes'):
+            for attr in entity['attributes']:
+                questions.append({
+                    'question': f"What is the {attr} of {entity['text']}?",
+                    'context': entity['context'],
+                    'answer': entity['attributes'][attr]
+                })
+                
+        if entity.get('actions'):
+            for action in entity['actions']:
+                questions.append({
+                    'question': f"How does {entity['text']} {action}?",
+                    'context': entity['context'],
+                    'answer': self._find_action_description(entity['context'], action)
+                })
+                
+        return questions
+
+    def _find_action_description(self, context: str, action: str) -> str:
+        doc = self.nlp(context)
+        for sent in doc.sents:
+            if action in sent.text.lower():
+                return sent.text
+        return ""

@@ -4,6 +4,7 @@ from typing import Dict, Tuple
 import os
 import logging
 from pathlib import Path
+from ..config.settings import HF_TOKEN, MODEL_NAME
 
 class ModelManager:
     def __init__(self, model_dir: str):
@@ -15,11 +16,9 @@ class ModelManager:
         self.model_path.mkdir(parents=True, exist_ok=True)
         self.tokenizer_path.mkdir(parents=True, exist_ok=True)
         
-        self.model_name = "distilbert-base-uncased"
+        self.model_name = MODEL_NAME
         
-        self.device = torch.device('mps' if torch.backends.mps.is_available() else
-                                 'cuda' if torch.cuda.is_available() else 
-                                 'cpu')
+        self.device = torch.device('cpu')  
         self.logger.info(f"Using device: {self.device}")
         
         self.model = None
@@ -44,8 +43,14 @@ class ModelManager:
                 self.logger.info("Model loaded successfully")
             else:
                 self.logger.info(f"Downloading model {self.model_name}")
-                self.model = AutoModelForQuestionAnswering.from_pretrained(self.model_name)
-                self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+                self.model = AutoModelForQuestionAnswering.from_pretrained(
+                    self.model_name,
+                    token=HF_TOKEN
+                )
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.model_name,
+                    token=HF_TOKEN
+                )
                 self.save_model()
                 self.logger.info("Model downloaded and saved")
                 
